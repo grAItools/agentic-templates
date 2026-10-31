@@ -1,12 +1,12 @@
-# agentic-templates
+# project-blueprints
 
-Templates and guides for Python development stacks and agent-agnostic repository setup.
+Recommended project blueprints for modern software development processes leveraging coding agents.
 
 ## Contents
 
-- [`python-project.md`](python-project.md): Python development stack template covering packaging, tooling, tests, documentation, CI, and verified releases. Complements the agent-agnostic guide.
-- [`agent-agnostic-repos.md`](agent-agnostic-repos.md): Agent-Agnostic Repository Guide. Explains how to make a repository work with any AI coding agent without vendor lock-in, both for new repos and for migrating existing ones.
+- [`harness-agnostic-project.md`](harness-agnostic-project.md): Standalone foundation for sharing instructions, skills, and tool configuration across supported AI coding harnesses, for both new and existing project repositories.
+- [`python-project.md`](python-project.md): Builds on the harness-agnostic foundation with Python packaging, tooling, tests, documentation, CI, and verified releases.
 
 ## Credits
 
-`agent-agnostic-repos.md` is a fork of [the original gist by davidgibsonp](https://gist.github.com/davidgibsonp/337be9b80b3f03eccd188235c287bb05).
+`harness-agnostic-project.md` is a fork of [the original gist by davidgibsonp](https://gist.github.com/davidgibsonp/337be9b80b3f03eccd188235c287bb05).

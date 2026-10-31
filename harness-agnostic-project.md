@@ -1,55 +1,72 @@
-# Agent-Agnostic Repository Guide
+# Harness-Agnostic Project Blueprint
 
-How to make a repository work with any AI coding agent without vendor lock-in: setting up a new repo (Part A) and migrating an existing one (Part B).
+Share project instructions, skills, and tool configuration across AI coding
+harnesses through small, explicit adapters. Part A covers new repositories;
+Part B covers migration.
+
+This standalone foundation defines harness integration for projects in any
+language and for coordination hubs.
+
+## Scope and Terminology
+
+A **harness** surrounds a model with software and configuration for loading instructions, exposing tools, managing context, and enforcing execution policies. An **agent** combines a model and a harness to perform tasks; one harness implementation can support multiple agents or subagents with different roles. [LangChain's model-plus-harness definition](https://www.langchain.com/blog/the-anatomy-of-an-agent-harness) includes instructions, tools, and skills in the harness.
+
+This blueprint distinguishes **harness implementations** (Claude Code, Codex CLI, oh-my-pi, opencode) from the **project inputs** they load (instructions, skills, MCP definitions). "Across harnesses" means across implementations; "harness-specific" means tied to one implementation. Below, **Codex** means Codex CLI and **omp** means oh-my-pi.
+
+**Harness-agnostic** means shared guidance and workflows are independent of any single implementation. Supported harnesses consume canonical sources through native discovery, imports, links, settings that point to shared files, or generated configuration. Adapters and validation are still required; behavior can differ across harnesses and models.
+
+Keep the established names `AGENTS.md`, `.agents/`, and **Agent Skills**: they identify files, directories, and a specification shared across harnesses.
+
+Record supported harnesses and tested versions in `.agents/README.md` (A.8). Validate instruction loading, skill discovery, and MCP configuration in each supported version. Check version-dependent examples against that harness's documentation.
 
 ---
 
 ## The Core Principle
 
-Every piece of agent configuration falls into one of three categories:
+Classify configuration items by how they can be shared. One file may contain generated and harness-specific sections.
 
 | Category | Strategy | Examples |
 |----------|----------|----------|
-| **Portable** (same format across agents) | Store once at the root or in `.agents/`. Agents that don't read it natively reach it through a symlink (skills) or an import (`CLAUDE.md` → `@AGENTS.md`) | `AGENTS.md`, `SKILL.md` |
-| **Generated** (same data, different format) | Canonical source in `.agents/`; a script renders each agent's file | MCP config |
-| **Agent-specific** (no cross-agent equivalent) | Leave in the agent's own directory; keep it thin and refer to portable sources instead of copying them | `.omp/rules/*.md`, `.claude/settings.json` |
+| **Portable** (shared format and compatible meaning) | Store once at the root or in `.agents/`; use native discovery, a symlink, an import (`CLAUDE.md` → `@AGENTS.md`), or a setting that points to it | `AGENTS.md`, portable `SKILL.md` skills |
+| **Generated** (shared data, different formats) | Store canonical data in `.agents/`; render each supported harness's configuration | Shared MCP server definitions |
+| **Harness-specific** (no portable mapping) | Keep in the harness's configuration; refer to shared sources instead of copying them | `.omp/rules/*.md`, `.claude/settings.json` |
 
 ---
 
-## Part A: New Repo Template
+## Part A: New Project Repository Template
 
 ### A.1 Directory Layout
 
 ```
 repo/
   AGENTS.md                  # Shared instructions
-  CLAUDE.md                  # "@AGENTS.md" + Claude-only overrides
+  CLAUDE.md                  # "@AGENTS.md" + Claude Code-specific overrides
   .agents/
     README.md                # How to maintain this directory (not AGENTS.md, see A.8)
     skills/<name>/SKILL.md   # Shared skills, with optional references/ and scripts/
     skills-local/.gitkeep    # Private skills (gitignored)
     mcp/servers.json         # Canonical MCP servers
     scripts/
-      sync-skills.sh         # Links skills into agent dirs
-      sync-mcp.sh            # Renders agent MCP configs
+      sync-skills.sh         # Links skills into harness directories
+      sync-mcp.sh            # Renders harness MCP configs
   .claude/
     skills/<name> -> ../../.agents/skills/<name>
-    settings.json            # Agent-specific
+    settings.json            # Harness-specific
   .omp/                      # oh-my-pi
-    rules/                   # Agent-specific
+    rules/                   # Harness-specific
     mcp.json                 # Generated
-  .opencode/agents/          # Agent-specific
-  opencode.json              # Agent-specific; `mcp` key generated
-  .codex/config.toml         # Agent-specific; `[mcp_servers.*]` tables generated
+  .opencode/agents/          # Harness-specific
+  opencode.json              # Harness-specific; `mcp` key generated
+  .codex/config.toml         # Harness-specific; `[mcp_servers.*]` tables generated
   .mcp.json                  # Generated (Claude Code)
   .gemini/settings.json      # Optional: makes Gemini CLI read AGENTS.md
 ```
 
 ### A.2 Instructions (AGENTS.md)
 
-[AGENTS.md](https://agents.md), the AAIF/Linux Foundation standard, holds the project overview, layout, setup commands, coding standards, git conventions, and a pointer to `.agents/README.md`. Codex, oh-my-pi (omp), Copilot, Devin and many other agents read it natively. Two need an adapter:
+[AGENTS.md](https://agents.md), the AAIF/Linux Foundation standard, holds the project overview, layout, setup commands, coding standards, git conventions, and a link to `.agents/README.md`. Codex, omp, Copilot, Devin, and other harnesses read it natively. Adapter examples:
 
-- **Claude Code** reads `CLAUDE.md`. Make it an import, followed by any Claude-only overrides:
+- **Claude Code** reads `CLAUDE.md`. Import `AGENTS.md`, then add any Claude Code-specific overrides:
 
   ```markdown
   @AGENTS.md
@@ -57,11 +74,13 @@ repo/
 
 - **Gemini CLI** reads `GEMINI.md` unless `.gemini/settings.json` says otherwise: `{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}`.
 
-For directory-scoped context in nested packages, add files like `src/package/AGENTS.md`; Codex and omp load every `AGENTS.md` from the repo root down to the working directory. Claude Code ignores `AGENTS.md` once a `CLAUDE.md` exists, so put a `CLAUDE.md` containing `@AGENTS.md` next to each nested one.
+The Gemini example covers instructions only. Full support also requires skill discovery and MCP adapters (B.6), not provided here.
+
+For nested packages, add files such as `src/package/AGENTS.md`. Codex and omp load each `AGENTS.md` from the repo root to the working directory. Claude Code ignores `AGENTS.md` once `CLAUDE.md` exists, so place a `CLAUDE.md` containing `@AGENTS.md` beside each nested one.
 
 ### A.3 Skills (SKILL.md)
 
-Skills are reusable workflows agents can invoke (`/deploy`, `/learn`). The [Agent Skills spec](https://agentskills.io/specification) format is portable:
+Skills package reusable instructions and workflows for agents. The [Agent Skills spec](https://agentskills.io/specification) defines a shared format:
 
 ```yaml
 ---
@@ -74,18 +93,20 @@ Step-by-step instructions for the agent...
 
 Keep `SKILL.md` under 500 lines and move details to `references/`.
 
-The format is portable; behavior isn't always. Agent-specific features (Claude's `context: fork`, inline shell-command substitution, `allowed-tools`, whose support varies even per the spec) are ignored or interpreted differently by other agents. Shared skills should contain only portable instructions and resources. A skill that depends on one agent's features stays in that agent's skills directory.
+A shared format does not guarantee compatible behavior. Claude Code's `context: fork` and inline shell-command substitution are not portable by default; the spec's experimental `allowed-tools` field also has varying support. Use only instructions, resources, and features compatible with all supported harnesses in shared skills. Keep harness-specific skills separate, subject to the discovery rules below.
 
-**Discovery.** Only agents that don't scan `.agents/skills/` get links. Don't link into the others: the extra copy is redundant, and Codex lists it as a duplicate skill.
+**Discovery.** Link skills only into harnesses that do not scan `.agents/skills/`; extra links are redundant and Codex lists them as duplicates.
 
-| Agent | Reads `.agents/skills/`? | Sync target |
+| Harness | Reads `.agents/skills/`? | Sync target |
 |-------|--------------------------|-------------|
 | Claude Code | No | `.claude/skills/` |
 | Codex | Yes (cwd up to repo root) | None |
 | omp | Yes (cwd up to repo root) | None |
 | opencode | Yes (cwd up to git worktree) | None |
 
-omp and opencode also scan `.claude/skills/` and should treat the links as the same skill; check this with your versions.
+omp and opencode also scan `.claude/skills/`; verify that your versions deduplicate the links.
+
+Harness-specific directories do not ensure isolation. For incompatible skills, use a location other supported harnesses do not scan. If none exists, make the skill portable or keep it in its harness-specific directory and record unsupported harness/skill combinations in `.agents/README.md`. Recording a limitation does not resolve incompatibility.
 
 **The sync script** (`.agents/scripts/sync-skills.sh`):
 
@@ -99,9 +120,9 @@ set -euo pipefail
 AGENTS_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_ROOT="$(cd "$AGENTS_DIR/.." && pwd)"
 MANAGED="../../.agents/skills"
-# Agents that don't discover .agents/skills/ natively
+# Harnesses that don't discover .agents/skills/ natively
 TARGETS=(".claude/skills")
-# Agents that do (omp, opencode) and leftovers from older setups: never sync here, only
+# Harnesses that do (omp, opencode) and leftovers from older setups: never sync here, only
 # clean up old links
 NATIVE=(".omp/skills" ".opencode/skills" ".codex/skills")
 changed=0
@@ -152,11 +173,11 @@ for target_dir in "${TARGETS[@]}"; do
     done
 done
 
-# Remove old links from agents that read .agents/skills/ natively (they duplicate skills)
+# Remove old links from harnesses that read .agents/skills/ natively (they duplicate skills)
 for native_dir in "${NATIVE[@]}"; do
     if [ -L "$REPO_ROOT/$native_dir" ]; then
         # Never prune through a dir alias: it could point at .claude/skills or .agents/skills
-        echo "ERROR: $native_dir is a symlink; this agent reads .agents/skills/ natively, so remove it." >&2; exit 2
+        echo "ERROR: $native_dir is a symlink; this harness reads .agents/skills/ natively, so remove it." >&2; exit 2
     fi
     for link in "$REPO_ROOT/$native_dir"/*; do
         [ -L "$link" ] || continue
@@ -182,10 +203,10 @@ fi
 exit "$changed"
 ```
 
-- It runs on the bash 3.2 that ships with macOS.
-- It only touches links of the exact form it creates (`../../.agents/skills/<name>`); anything else in the way stops it with exit 2. List hand-made, machine-local links (e.g., to `~/.agents/skills/`) in `.git/info/exclude` so the staging check ignores them.
-- It handles the `.agents/skills/` next to it. Skills for one nested package belong in that package's own `.agents/skills/`, with its own copy of the script and hook entry; moving them to the root makes them visible repo-wide.
-- It only makes symlinks. On Windows, run it from Git Bash or WSL and enable `core.symlinks` and Developer Mode (or admin rights) before cloning; otherwise links check out as text files and the script stops with exit 2. Agents or machines that can't use symlinks need a copy mode, which must track the copies it owns and remove stale ones.
+- Runs on macOS's bash 3.2.
+- Manages only links of the form `../../.agents/skills/<name>`; conflicts stop it with exit 2. Exclude hand-made, machine-local links (e.g., to `~/.agents/skills/`) through `.git/info/exclude` so staging checks ignore them.
+- Handles the adjacent `.agents/skills/`. Package-scoped skills need that package's own directory, script, and hook entry; root skills are visible repo-wide.
+- Creates symlinks only. On Windows, use Git Bash or WSL and enable `core.symlinks` plus Developer Mode (or admin rights) before cloning. Otherwise links check out as text files and trigger exit 2. Where symlinks are unavailable, implement a copy mode that tracks owned copies and removes stale ones.
 
 **Third-party skills** ([Vercel skills CLI](https://github.com/vercel-labs/skills)):
 
@@ -194,15 +215,15 @@ npx skills add <repo>@<skill-name> -y
 .agents/scripts/sync-skills.sh
 ```
 
-Which agent dirs the CLI links into depends on what it detects, so always run the sync script afterwards. If the CLI wrote a copy into `.claude/skills/`, the script stops: check that the copy matches (`diff -r .claude/skills/<name> .agents/skills/<name>`), delete it, and rerun.
+Always run the sync script after installation: the CLI selects harness directories by detection. If it copied a skill into `.claude/skills/`, sync stops. Verify it matches (`diff -r .claude/skills/<name> .agents/skills/<name>`), delete the copy, and rerun.
 
 **Private skills** go in `.agents/skills-local/` (gitignored). If you extend the script to link them, don't commit those links.
 
 ### A.4 MCP Configuration
 
-MCP server definitions hold the same data for every agent in a different format, so they are generated from `.agents/mcp/servers.json`:
+Store shared MCP server definitions in `.agents/mcp/servers.json` and generate each harness's format:
 
-| Agent | File | Format |
+| Harness | File | Format |
 |-------|------|--------|
 | Claude Code | `.mcp.json` | JSON, servers under `mcpServers`; URL servers need `"type": "http"` |
 | omp | `.omp/mcp.json` | JSON, servers under `mcpServers`; `type` is `stdio`/`http`/`sse`. Read only from the directory omp starts in |
@@ -226,11 +247,11 @@ MCP server definitions hold the same data for every agent in a different format,
 }
 ```
 
-A bare map of server names, with no `mcpServers` wrapper. Each server is `stdio` (`command`, `args`, `env`) or `http` (`url`, `headers`). Never put secrets in it. Use placeholders instead, in one of two forms: a whole value `${NAME}` (in `env` or a header), or `Bearer ${NAME}` in an `Authorization` header.
+Use a bare map of server names, without a `mcpServers` wrapper. Servers are `stdio` (`command`, `args`, `env`) or `http` (`url`, `headers`). Store no secrets: use `${NAME}` as a whole `env` or header value, or `Bearer ${NAME}` in an `Authorization` header.
 
-**The generator** (`sync-mcp.sh`) is not included here; a short Python or `jq` script is typical. It should:
+**Implement `sync-mcp.sh`** (not included), typically in Python or `jq`. It should:
 
-- render each server for each agent based on its `type`:
+- render each server for each supported harness based on its `type`:
   - Claude Code: canonical fields under `mcpServers`; placeholders work as-is
   - opencode: `local`/`remote`; `command` and `args` merged into one `command` array; `environment` instead of `env`; `{env:NAME}` instead of `${NAME}`
   - Codex: an `env` entry `${NAME}` with the same name becomes `env_vars = ["NAME"]`; `Bearer ${NAME}` becomes `bearer_token_env_var = "NAME"`; other placeholder headers go in `env_http_headers`, static ones in `http_headers`
@@ -241,13 +262,13 @@ A bare map of server names, with no `mcpServers` wrapper. Each server is `stdio`
 - support `check`: render to a temporary location, compare, exit non-zero on differences, change nothing
 - fail on a field or placeholder it can't map, instead of dropping it
 
-For servers the canonical format doesn't cover (SSE, OAuth, agent-specific options), either extend the format and the generator, or configure them by hand per agent; in that case the generator must track which server names it owns.
+For definitions outside this format (SSE, OAuth, harness-specific options), extend the format and generator or configure them per harness. Track generated server names so hand-maintained entries remain untouched.
 
-**Codex trust:** Codex loads `.codex/` only for trusted projects, so review the checkout and trust it. Writing the servers into `~/.codex/config.toml` instead makes them apply to every project and can collide with existing names. If you offer that, make it an explicit opt-in (e.g., an `install-codex` command writing a block between `# BEGIN <repo> managed MCP` / `# END <repo> managed MCP` comments) that refuses on name collisions, with a matching uninstall.
+**Codex trust:** Codex loads `.codex/` only in trusted projects; review the checkout, then trust it. Writing to `~/.codex/config.toml` affects every project and risks name collisions. Offer that only as an explicit opt-in, such as `install-codex`, with a marked block (`# BEGIN <repo> managed MCP` / `# END <repo> managed MCP`), collision refusal, and matching uninstall.
 
-### A.5 Agent-Specific Files (Leave As-Is)
+### A.5 Harness-Specific Files (Leave As-Is)
 
-| File | Agent | Contents |
+| File | Harness | Contents |
 |------|-------|----------|
 | `.omp/rules/*.md` | omp | Rules triggered by `description`, `alwaysApply`, `condition`, `globs`. Loaded only from the directory omp starts in, so launch omp from the repo root |
 | `opencode.json` (except `mcp`), `.opencode/agents/*.md` | opencode | Settings, subagents |
@@ -255,7 +276,7 @@ For servers the canonical format doesn't cover (SSE, OAuth, agent-specific optio
 | `.claude/settings.json`, `.claude/agents/*.md` | Claude Code | Hooks, subagents |
 | `.claude/settings.local.json` | Claude Code | Machine-local permissions (gitignored) |
 
-Don't sync between these formats. Put knowledge every agent needs in `AGENTS.md`, and keep agent-specific files thin: an `.omp/rules/` rule adds only its trigger and links to the doc with the guidance, and a hook in `.claude/settings.json` calls a script in `.agents/scripts/`.
+Do not sync between these formats. Keep shared guidance in `AGENTS.md` and harness-specific files thin: an `.omp/rules/` rule adds only its trigger and a link to shared guidance; a Claude Code hook calls a script in `.agents/scripts/`.
 
 ### A.6 Automation
 
@@ -266,7 +287,7 @@ repos:
   - repo: local
     hooks:
       - id: sync-agent-skills
-        name: "Sync .agents/skills to agent dirs"
+        name: "Sync .agents/skills to harness directories"
         entry: .agents/scripts/sync-skills.sh
         language: script
         pass_filenames: false
@@ -279,11 +300,11 @@ repos:
         always_run: true  # Also catches hand edits to generated files and generator changes
 ```
 
-When `sync-skills.sh` changes something, or a link or new skill is untracked or unstaged, the commit stops; stage and commit again. An untracked directory in `.agents/skills/` blocks every commit, so keep drafts in `.agents/skills-local/`.
+Stage every new skill and managed link. Sync changes, untracked or unstaged links, and untracked new skills stop the commit; fix staging and retry. Keep drafts in `.agents/skills-local/` so untracked skills do not block every commit.
 
-The check covers what is being committed. During `git commit`, pre-commit sets unstaged edits to tracked files aside, so the hook sees the staged links; `pre-commit run --all-files` doesn't, so it also reports unstaged edits.
+During `git commit`, pre-commit sets aside unstaged tracked edits, so checks see the staged links. `pre-commit run --all-files` also sees unstaged edits.
 
-Hooks only run after `pre-commit install` and are skipped by `--no-verify`, so also run `pre-commit run --all-files` in CI.
+Hooks run only after `pre-commit install` in each clone, and `--no-verify` skips them. Also run `pre-commit run --all-files` in CI.
 
 ### A.7 .gitignore
 
@@ -294,7 +315,7 @@ Hooks only run after `pre-commit install` and are skipped by `--no-verify`, so a
 .claude/worktrees/
 ```
 
-In a **whitelist repo** (`*` ignores everything), put the allow-list first and the machine-local ignores after it. Git uses the last matching pattern, so `!.agents/**` would otherwise re-include private files:
+In a repo where `*` ignores everything, put allow-list entries before machine-local ignores. Git's last matching pattern wins; reversing the order would re-include private files:
 
 ```gitignore
 !.agents/
@@ -326,13 +347,23 @@ In a **whitelist repo** (`*` ignores everything), put the allow-list first and t
 
 ### A.8 `.agents/README.md` Template
 
-This lets any agent maintain the directory. Name it `README.md`, not `AGENTS.md`: omp loads `.agents/AGENTS.md` at the same level as the root `AGENTS.md`, which it then hides. Link to it from the root `AGENTS.md`.
+Link this maintenance guide from root `AGENTS.md`. Name it `README.md`: omp loads `.agents/AGENTS.md` at the root's level, hiding the root `AGENTS.md`.
 
 ```markdown
 # .agents/
 
-Agent-agnostic configuration following the [Agent Skills](https://agentskills.io)
+Harness-agnostic configuration following the [Agent Skills](https://agentskills.io)
 and [AGENTS.md](https://agents.md) conventions.
+
+## Supported Harnesses
+
+Record tested support below. When adding or upgrading a harness, verify instruction
+loading, duplicate-free skill discovery, and MCP server discovery and connectivity.
+Record adapters, limitations, and unsupported harness/skill combinations.
+
+| Harness | Tested version | Validated on | Adapters | Limitations |
+|---------|----------------|--------------|----------|-------------|
+| <name> | <version> | <YYYY-MM-DD> | <required adapters> | <known limitations or none> |
 
 ## Layout
 
@@ -356,22 +387,24 @@ and [AGENTS.md](https://agents.md) conventions.
 
 ## Rules
 
-- Edit shared skills here, never through their links in `.claude/skills/`.
-  Claude-only skills stay as real directories in `.claude/skills/`
-- Edit MCP servers only in `mcp/servers.json`; the agent MCP configs are generated
-- The pre-commit hook re-syncs skills and stops the commit while a link or new skill is missing from it
+- Edit shared skills here, not through `.claude/skills/` links.
+- For harness-specific skills (A.3), use a location incompatible harnesses do not
+  scan, make the skill portable, or keep its harness-specific location and record
+  unsupported combinations under Supported Harnesses.
+- Edit MCP servers only in `mcp/servers.json`; the harness MCP configs are generated
+- The pre-commit hook syncs skills and blocks commits missing links or new skills
 ```
 
-### A.9 New Repo Checklist
+### A.9 New Project Repository Checklist
 
-1. Create `AGENTS.md`, `CLAUDE.md` (`@AGENTS.md`), and `.gemini/settings.json` if you use Gemini CLI
-2. Create `.agents/` as in A.1, including `README.md` (A.8)
+1. Create `AGENTS.md` and the adapters your supported harnesses need, such as `CLAUDE.md` (`@AGENTS.md`) for Claude Code or `.gemini/settings.json` for Gemini CLI
+2. Create `.agents/` (A.1) and its support record in `README.md` (A.8)
 3. Add `sync-skills.sh`, write `sync-mcp.sh` (A.4), and `chmod +x .agents/scripts/*.sh`
 4. Add skills and run `sync-skills.sh`. It exits 1 after creating links and until they are staged, so don't chain it with `&&`
 5. Run `sync-mcp.sh`
 6. Update `.gitignore` (A.7)
 7. Add `.pre-commit-config.yaml`, install pre-commit (e.g., `uv tool install pre-commit`), and run `pre-commit install`; every clone needs this
-8. Stage everything, run `pre-commit run --all-files`, and check that each agent lists the skills and MCP servers
+8. Stage everything, run `pre-commit run --all-files`, and validate each harness as described in A.8
 
 ---
 
@@ -380,7 +413,7 @@ and [AGENTS.md](https://agents.md) conventions.
 ### B.1 Assessment
 
 ```bash
-# Agent config files, at any depth
+# Harness config files, at any depth
 find . \( -name .git -o -name .venv -o -name node_modules \) -prune -o \( \
   -name "AGENTS.md" -o -name "CLAUDE.md" -o -name "GEMINI.md" -o \
   -name ".mcp.json" -o -name "mcp.json" -o \
@@ -399,44 +432,44 @@ find . \( -name .git -o -name .venv -o -name node_modules \) -prune -o \
 | Asset | Category | Action |
 |-------|----------|--------|
 | `AGENTS.md` | Portable | Keep at root; create if missing |
-| `CLAUDE.md` with full instructions | Portable | Move content to `AGENTS.md`, leave an `@AGENTS.md` import |
-| Real skill dirs in `.claude/`, `.omp/`, `.opencode/`, `.codex/` `skills/` | Portable unless they use agent-specific features (A.3) | Move to `.agents/skills/`, or leave in place if agent-specific |
+| `CLAUDE.md` with full instructions | Portable + harness-specific | Move shared guidance to `AGENTS.md`; retain its import and Claude Code-specific overrides in `CLAUDE.md` |
+| Real skill dirs under `.claude/skills/`, `.omp/skills/`, `.opencode/skills/`, `.codex/skills/` | Portable or harness-specific | Move portable skills to `.agents/skills/`; apply A.3's discovery rules and fallback to harness-specific skills |
 | `.agents/skills/*/` | Portable | None |
 | `.mcp.json`, `.omp/mcp.json`, `opencode.json` `mcp` key, `.codex/config.toml` `[mcp_servers.*]` | Generated | Merge into `.agents/mcp/servers.json`, then generate |
-| `.omp/rules/`, `.claude/settings*.json`, other `opencode.json` and `.codex/config.toml` settings, `.opencode/agents/` | Agent-specific | Leave |
+| `.omp/rules/`, `.claude/settings*.json`, other `opencode.json` and `.codex/config.toml` settings, `.opencode/agents/` | Harness-specific | Leave |
 
 ### B.3 Migration Steps by Layer
 
 Go from lowest to highest risk:
 
-1. **Instructions.** Keep an existing `AGENTS.md` as canonical. If only `CLAUDE.md` exists, rename it to `AGENTS.md` and recreate `CLAUDE.md` as an import. If both exist, merge into `AGENTS.md` and reduce `CLAUDE.md` to the import plus overrides.
+1. **Instructions.** Make `AGENTS.md` canonical: keep it if present, create it otherwise. Move or merge shared guidance from `CLAUDE.md`, leaving only the import and Claude Code-specific overrides there.
 2. **Skills.**
    - Check every skills directory from B.2, including in nested packages.
-   - Leave skills that rely on agent-specific features where they are.
+   - Apply A.3's discovery rules and fallback to harness-specific skills.
    - Merge same-named skills with different content by hand.
-   - `git mv` each portable skill's whole directory (it can hold `references/` and `scripts/`) to the `.agents/skills/` at the same level: the root's, or the nested package's (A.3).
+   - `git mv` each portable skill's whole directory, including resources and scripts, to `.agents/skills/` at the same root or package scope (A.3).
    - Run `sync-skills.sh` and add the hook.
 3. **MCP.**
-   - Collect servers from every agent's config; one file rarely has them all.
-   - Convert them to the canonical format (A.4): take the entries without the wrapper (e.g., `jq .mcpServers .mcp.json`), translate agent-specific fields back (opencode `local` with a command array becomes `stdio` with `command` and `args`), and replace literal secrets with placeholders.
-   - Resolve same-named servers that differ by hand.
-   - Write `sync-mcp.sh`, run it, and diff the outputs against the originals; every difference should be intentional.
+   - Collect server definitions from every supported harness.
+   - Convert them to the canonical format (A.4): take the entries without the wrapper (e.g., `jq .mcpServers .mcp.json`), translate harness-specific fields back (opencode `local` with a command array becomes `stdio` with `command` and `args`), and replace literal secrets with placeholders.
+   - Resolve conflicting same-named servers by hand.
+   - Implement and run `sync-mcp.sh`; diff against the originals and verify every change is intentional.
    - Add the check to pre-commit and CI.
-4. **Cleanup.** Add `.agents/README.md` (renaming an existing `.agents/AGENTS.md`, which hides the root `AGENTS.md` in omp), update `.gitignore`, and run `pre-commit run --all-files`.
+4. **Cleanup.** Add `.agents/README.md` (rename `.agents/AGENTS.md` if present; see A.8), update `.gitignore`, and run `pre-commit run --all-files`.
 
 ### B.4 Archetype-Specific Guidance
 
-**Partially migrated code project** (has `.agents/skills/`, a root `AGENTS.md`, maybe a script that copies skills around): replace the copy script with `sync-skills.sh` (symlinks only, see A.3), add the hooks, make MCP generation cover every agent, and land it all in one commit.
+**Partially migrated project** (already has root `AGENTS.md` and `.agents/skills/`, possibly with a skill-copy script): replace copy scripts with `sync-skills.sh` (symlinks only, A.3), add hooks, cover every supported harness in MCP generation, and land the migration in one commit.
 
-**Repo with submodules and agent-specific rules:**
+**Repo with submodules and harness-specific rules:**
 
 - Leave `.omp/rules/` as is (A.5); the parent's rules handle only meta-level navigation.
 - Migrate each submodule on its own instead of centralizing its config in the parent.
-- Agents find project MCP config relative to where they start, not where the edited files live, and each searches differently: omp reads only its start directory, opencode searches up to the Git boundary. A session started at the parent root uses the parent's servers even while editing a submodule; one started at a submodule's root uses the submodule's (for omp, only at that exact root). User-level configs add servers in both cases. Give a submodule its own `.agents/mcp/servers.json` if people start agents there.
+- MCP discovery starts from the session's launch directory, not the edited file: omp reads only that directory; opencode searches up to the Git boundary. A parent-root session uses the parent's servers even when editing a submodule; a submodule-root session uses the submodule's (for omp, start at that exact root). User-level servers apply in both cases. Give submodules their own `.agents/mcp/servers.json` when people start sessions there.
 
 **Coordination hub** (not a code project; many sub-projects in their own repos):
 
-- In a whitelist `.gitignore` (A.7), allow every agent directory, and add new ones as you adopt new agents.
+- Allow each supported harness directory in an allow-list `.gitignore` (A.7); add entries when adopting new harnesses.
 - Skills are operational workflows (triage tickets, dispatch work to sub-projects); the format is the same.
 - `AGENTS.md` is a router rather than a code guide:
 
@@ -451,11 +484,12 @@ Go from lowest to highest risk:
 ### B.5 Decision Tree
 
 ```
-Do multiple agents read this file identically?
-  YES -> Portable: keep one copy in .agents/ or at the root; link or import it where needed.
-  NO  -> Same data in a different format?
+Does this item have the same format and compatible meaning across supported harnesses,
+using native discovery, links, imports, or settings that point to shared files?
+  YES -> Portable: one source at the root or in .agents/; adapt discovery.
+  NO  -> Can a generator translate shared data into each supported harness's format without losing meaning?
     YES -> Generated: canonical source in .agents/, rendered by a script.
-    NO  -> Agent-specific: leave it, referring to portable sources where possible.
+    NO  -> Harness-specific: leave it, referring to portable sources where possible.
 ```
 
 ### B.6 Ongoing Maintenance
@@ -464,7 +498,8 @@ Do multiple agents read this file identically?
 |------|-----|
 | Add or install a skill | Create it in `.agents/skills/` or `npx skills add`, run `sync-skills.sh`, commit skill and links |
 | Add an MCP server | Edit `.agents/mcp/servers.json`, run `sync-mcp.sh`, commit generated files |
-| Support a new agent | Add its rendering to `sync-mcp.sh`; add it to `TARGETS` in `sync-skills.sh` unless it reads `.agents/skills/` natively |
+| Support a new harness | Add any needed instruction adapter and MCP rendering; add it to `TARGETS` in `sync-skills.sh` unless it reads `.agents/skills/` natively; validate and record support in `.agents/README.md` |
+| Upgrade a supported harness | Recheck instruction loading, skill discovery and behavior, and MCP connectivity; update the tested version, validation date, and limitations in `.agents/README.md` |
 | Validate a skill | `skills-ref validate .agents/skills/<name>` |
 
 ---
@@ -483,4 +518,4 @@ Do multiple agents read this file identically?
 | Codex docs | Codex skills and project config | [build skills](https://learn.chatgpt.com/docs/build-skills), [config basics](https://learn.chatgpt.com/docs/config-file/config-basic) |
 | opencode docs | opencode config, skills, MCP | [opencode.ai/docs](https://opencode.ai/docs/config/) |
 | oh-my-pi docs | omp skills, rules, MCP, context files | [github.com/can1357/oh-my-pi/tree/main/docs](https://github.com/can1357/oh-my-pi/tree/main/docs) |
-| SSW Rules | Symlinking agent dirs to Claude | [ssw.com.au/rules/symlink-agents-to-claude](https://www.ssw.com.au/rules/symlink-agents-to-claude) |
+| SSW Rules | Symlinking harness directories to Claude | [ssw.com.au/rules/symlink-agents-to-claude](https://www.ssw.com.au/rules/symlink-agents-to-claude) |

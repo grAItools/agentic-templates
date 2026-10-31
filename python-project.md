@@ -1,13 +1,12 @@
 # Python Project Repository Blueprint
 
-This template defines a development stack for installable Python libraries
+This blueprint defines a development stack for installable Python libraries
 and command-line applications: package layout, dependencies, code quality,
 testing, documentation, CI, and releases.
 
-Use the [Agent-Agnostic Repository Guide](agent-agnostic-repos.md) alongside
-this template for coding-agent integration. The guides are complementary:
-this document owns the Python stack and workflow; the companion owns agent
-setup.
+This blueprint builds on the [Harness-Agnostic Project Blueprint](harness-agnostic-project.md),
+which defines shared instructions, skills, and harness configuration. It adds
+the Python stack and workflow.
 
 This document specifies a repository to create. Script names below define
 interfaces to implement; this document does not ship a scaffold or generator.
@@ -242,11 +241,11 @@ Keep tool scope and exclusions in `pyproject.toml`, including maintained
 utilities under hidden directories. Whole-project hooks use
 `pass_filenames: false`; changing a configuration file must trigger the checks
 it affects. Use `always_run: true` for checks that must notice deletions or
-configuration-only changes. When combining this stack with the companion
-guide, merge their hooks into the same configuration and preserve each
-guide's ownership of its checks. Use the locked prek runner wherever that
-guide says `pre-commit`; install one hook manager per clone. Shell-based hooks
-retain the companion guide's platform prerequisites. Windows contributors
+configuration-only changes. Merge this stack's hooks with the foundation
+blueprint's hooks in one configuration and preserve each
+blueprint's ownership of its checks. Use the locked prek runner wherever that
+blueprint says `pre-commit`; install one hook manager per clone. Shell-based hooks
+retain the foundation blueprint's platform prerequisites. Windows contributors
 using those hooks must satisfy those prerequisites; Python correctness tests
 do not depend on running the entire hook suite.
 
@@ -347,7 +346,7 @@ the documentation grows, without requiring a fixed directory structure.
 The API page may be handwritten; update it alongside public behavior and
 cross-check its names and examples against the package. Automated extraction
 is optional and requires a separately verified documentation integration.
-When the companion guide is adopted, keep its project instructions concise
+Keep the foundation blueprint's project instructions concise
 and link to `CONTRIBUTING.md` and the shared commands for authoritative workflow
 details rather than maintaining a second command reference.
 
